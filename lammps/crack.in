@@ -1,0 +1,86 @@
+# 2d LJ crack simula
+
+dimension 2
+boundary s p p
+
+atom_style bond
+neighbor 0.3 bin
+neigh_modify delay 10
+
+# create geometry
+
+#variable rcrit equal 1.20
+variable ron equal 1.1375
+variable k1 equal 10
+#variable k2 equal 1 
+#variable theta equal 300
+
+variable r0 equal 1.12246
+variable height equal $(240/sqrt(3))
+variable cracklength equal $(v_height*sqrt(3))
+variable length equal 960
+
+lattice hex 0.9165
+region box block 0 $(v_length) 0 $(v_height) -0.25 0.25
+create_box 5 box 
+create_atoms 1 box
+
+mass 1 1.0
+mass 2 1.0
+mass 3 1.0
+mass 4 1.0
+mass 5 1.0
+
+pair_style biharmonic/smoothed 1.5
+pair_coeff * * $(v_k1) $(v_k1*v_k2) $(v_r0) $(v_ron) $(v_rcrit) $(v_theta) 
+
+# define groups
+region 1 block INF INF INF $(v_rcrit) INF INF
+group lower region 1
+region 2 block INF INF $(v_height-v_rcrit) INF INF INF
+group upper region 2
+region 3 block $(v_length) INF INF INF INF INF
+group rightEdge region 3
+group boundary union lower upper rightEdge
+group mobile subtract all boundary
+
+region leftupper block INF $(v_cracklength) $(v_height/2) INF INF INF
+region leftlower block INF $(v_cracklength) INF $(v_height/2) INF INF
+group leftupper region leftupper
+group leftlower region leftlower
+group leftupper subtract leftupper leftlower
+
+group right subtract all leftupper leftlower
+
+set group leftupper type 2
+set group leftlower type 3
+set group lower type 4
+set group upper type 5
+
+group loading union leftupper leftlower
+
+compute coord_atom all coord/atom cutoff 1.25
+
+fix deform all deform 1 y erate 0.00001 remap x
+fix viscous loading viscous 0.5
+
+fix 1 all nve
+fix 2 boundary setforce 0.0 0.0 0.0
+
+variable pos_coord atom (c_coord_atom<=4)*(x<(1.11*v_length))*x
+variable y_coord atom (c_coord_atom<=4)*(x<(1.11*v_length))*(x>100)*abs((y-v_height*sqrt(3)*1.12246/2))
+
+compute crackpos all reduce max v_pos_coord 
+compute crackdev all reduce max v_y_coord
+
+dump myDump all custom 10000 trajectory.bin id type x y z vx vy vz c_coord_atom v_pos_coord
+
+# run
+timestep 0.0036
+thermo 10
+
+thermo_style custom step time temp c_crackpos c_crackdev cpuremain
+
+neigh_modify exclude type 2 3
+run 1000000
+

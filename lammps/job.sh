@@ -1,0 +1,1 @@
+mpirun -np 16 /home/henriasv/repos/lammps_2019_05/src/lmp_mpi -in crack.in 
